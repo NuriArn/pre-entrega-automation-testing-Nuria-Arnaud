@@ -1,5 +1,5 @@
 # Proyecto de Automatización Web con Selenium y Pytest  
-**Pre-Entrega de Proyecto – Curso de Testing Automation**
+**Entrega Final – Curso de Testing Automation**
 
 # Alumna: Nuria Arnaud
 
@@ -25,12 +25,11 @@ A través de este trabajo se busca demostrar la capacidad para:
 
 ---
 
-## Objetivo del Proyecto:
+## Otros
 
-El propósito de esta automatización es:
+Page Object Model (POM)
+Pruebas API con Requests
+MockAPI como API simulada
 
-Aplicar buenas prácticas en Selenium WebDriver.
-Utilizar Pytest con una estructura modular.
-Validar el comportamiento del sitio web desde la perspectiva del usuario.
-Preparar el entorno para futuras automatizaciones avanzadas.
-
+La aplicación web automatizada es Saucedemo (UI).
+La API automatizada es un endpoint personal de MockAPI.

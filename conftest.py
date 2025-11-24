@@ -1,64 +1,73 @@
-# conftest.py
 import os
+import datetime as dt
+import logging
+from logging.handlers import RotatingFileHandler
+
 import pytest
 from selenium import webdriver
-from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-
-# --- Chrome ---
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from webdriver_manager.chrome import ChromeDriverManager
 
 
-@pytest.fixture(scope="function")
+# ---------- LOGGING ----------
+def _setup_logger():
+    os.makedirs("logs", exist_ok=True)
+    logger = logging.getLogger("suite")
+    logger.setLevel(logging.INFO)
+
+    if logger.handlers:
+        return logger  # evita duplicar handlers
+
+    fh = RotatingFileHandler(
+        "logs/suite.log",
+        maxBytes=1_000_000,   # 1 MB
+        backupCount=5,
+        encoding="utf-8"
+    )
+    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+    return logger
+
+
+LOGGER = _setup_logger()
+
+
+# ---------- FIXTURES ----------
+
+from selenium.webdriver.chrome.options import Options
+
+@pytest.fixture
 def driver():
-   
-    os.environ.setdefault("WDM_LOCAL", "1") 
-  
-
-    opts = ChromeOptions()
-    opts.add_experimental_option("prefs", {
-        "credentials_enable_service": False,
-        "profile.password_manager_enabled": False
-    })
-    opts.add_argument("--incognito")
-    # Estabilizadores útiles en Windows/CI:
-    opts.add_argument("--no-sandbox")
-    opts.add_argument("--disable-dev-shm-usage")
-    opts.add_argument("--proxy-server=direct://")
-    opts.add_argument("--proxy-bypass-list=*")
-    
-
-    service = ChromeService(ChromeDriverManager().install())
-    d = webdriver.Chrome(service=service, options=opts)
-
-    
-    d.set_window_size(1280, 900)
-    d.implicitly_wait(2)  
-    try:
-        yield d
-    finally:
-        d.quit()
+    chrome_opt = Options()
+    #abre chrome como incognito y desactiva popup de
+    #contraseña filtrada, que impedia que los test cases se ejecuten bien
+    chrome_opt.add_argument("--incognito")
+    driver = webdriver.Chrome(options=chrome_opt)
+    yield driver
+    driver.quit()
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def wait(driver):
-    return WebDriverWait(driver, 15)
+    return WebDriverWait(driver, 10)
 
 
-@pytest.fixture
-def login_in_driver(driver, wait):
-    """Abre la página, hace login y valida /inventory + textos clave."""
-    driver.get("https://www.saucedemo.com/")
+# ---------- SCREENSHOTS ON FAIL ----------
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Si falla un test UI, guarda screenshot en reports/screens/"""
+    outcome = yield
+    report = outcome.get_result()
 
-    wait.until(EC.visibility_of_element_located((By.ID, "user-name"))).send_keys("standard_user")
-    driver.find_element(By.ID, "password").send_keys("secret_sauce")
-    driver.find_element(By.ID, "login-button").click()
-
-    # Validaciones post-login
-    wait.until(EC.url_contains("/inventory.html"))
-    wait.until(EC.text_to_be_present_in_element((By.CLASS_NAME, "title"), "Products"))
-    wait.until(EC.text_to_be_present_in_element((By.CLASS_NAME, "app_logo"), "Swag Labs"))
-    return driver
+    if report.when == "call" and report.failed:
+        driver = item.funcargs.get("driver")
+        if driver:
+            os.makedirs("reports/screens", exist_ok=True)
+            timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+            file_name = f"{item.name}_{timestamp}.png"
+            path = os.path.join("reports/screens", file_name)
+            driver.save_screenshot(path)
+            LOGGER.info(f"Screenshot guardada: {path}")
